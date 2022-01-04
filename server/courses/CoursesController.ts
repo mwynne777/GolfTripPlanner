@@ -2,17 +2,60 @@ import express, { Request, Response, NextFunction } from 'express';
 import HTMLParser from 'node-html-parser';
 import fetch from 'node-fetch'
 import {Course} from './Course'
+import { supabase } from '../db';
 
 const router = express.Router()
 
 const BASE_URL = 'https://ncrdb.usga.org/courseTeeInfo.aspx?CourseID=';
 
-router.get('/:id', async (req,res) =>{
-    console.log("Hit the Courses endpoint")
+router.get('/loadCourse/:id', async (req, res) => {
+    console.log('Hit loading endpoint')
     let {id} = req.params;
-    const course = await fetchCourseAndRatingById(parseInt(id))
-    return res.json(course); 
+    let currentId = parseInt(id)
+    for(let outter = 0; outter < 10; outter++) {
+        const coursesToInsert: Course[] = []
+        for(let i = 0; i < 100; i++) {
+            const course = await fetchCourseAndRatingById(currentId)
+            if(!('error' in course)) {
+                coursesToInsert.push(course)
+            }
+            currentId++;
+        }
+        let status: 'success' | 'error' = 'success'
+
+        try {
+            await supabase.from('courses').insert(coursesToInsert)
+            console.log(`Pushed ${coursesToInsert.length} records`)
+        } catch {
+            status = 'error'
+            console.log(`Error with iteration number ${outter}`)
+        }
+    }
+
+    return res.json({status})
+})
+
+router.get('/:id', async (req,res) => {
+    console.log("Hit the Course by ID endpoint")
+    let { id } = req.params;
+    const { data } = await supabase.from('courses').select('*').eq('id', parseInt(id)).single()
+    return res.json(data); 
  });
+
+ router.get('/state/:state', async (req, res) => {
+     console.log("Hit the Course by State endpoint")
+     let { state } = req.params
+     const { data } = await supabase.from('courses').select('*').eq('state', state)
+     console.log(`Returning ${data.length} courses in ${state}`)
+     return res.json(data);
+ })
+
+ router.get('/', async (req, res) => {
+    console.log('Hit endpoint to get all courses')
+    const {data} = await supabase.from('courses')
+    return res.json(data)
+ })
+
 
  const fetchCourseAndRatingById = async (id: number) => {
     const result = await fetch(BASE_URL + id);
@@ -37,12 +80,12 @@ const parseCourseResult = (htmlResult, id: number): Course => {
     if (teeTable != null) {
         const tableRows = teeTable.querySelectorAll('tr');
         tableRows.shift();
-        tableRows.forEach(row => {
-            const [_, __, par, courseRating] = row.querySelectorAll('td');
-
-            course.par = parseInt(par.text),
-            course.rating = parseFloat(courseRating.text)
-        });
+        if(tableRows.length > 0) {
+                const [_, __, par, courseRating] = tableRows[0].querySelectorAll('td');
+    
+                course.par = parseInt(par.text),
+                course.rating = parseFloat(courseRating.text)
+        }
     }
     return course;
 };
