@@ -3,6 +3,12 @@ import HTMLParser from 'node-html-parser';
 import fetch from 'node-fetch'
 import {Course} from './Course'
 import { supabase } from '../db';
+import dotenv from 'dotenv'
+
+const result = dotenv.config();
+if (result.error) {
+  throw result.error;
+}
 
 const router = express.Router()
 
@@ -39,7 +45,19 @@ router.get('/:id', async (req,res) => {
     console.log("Hit the Course by ID endpoint")
     let { id } = req.params;
     const { data } = await supabase.from('courses').select('*').eq('id', parseInt(id)).single()
-    return res.json(data); 
+    const { clubName } = data
+
+    const clubNameSerialized = encodeURI(clubName)
+    console.log(clubNameSerialized)
+    const geocodingUrl = 'https://api.mapbox.com/geocoding/v5/mapbox.places/'
+    const location = await fetch(`${geocodingUrl}${clubNameSerialized}}.json?access_token=${process.env.MAPBOX_ACCESS_TOKEN}`)
+    if(!location.error) {
+        const { features } = await location.json()
+        return res.json(features[0].center); 
+    } else {
+        console.log(location.error)
+    }
+
  });
 
  router.get('/state/:state', async (req, res) => {
@@ -49,6 +67,18 @@ router.get('/:id', async (req,res) => {
      console.log(`Returning ${data.length} courses in ${state}`)
      return res.json(data);
  })
+
+ router.get('/stateFunction/:state', async (req, res) => {
+    console.log("Hit the Towns by State endpoint")
+    let { state } = req.params
+    const { data, error } = await supabase.rpc('gettownsinstate', { inputstate: state })
+    if(!error) {
+        console.log(`Returning ${data.length} courses in ${state}`)
+        return res.json(data);
+    } else {
+        console.log(error)
+    }
+})
 
  router.get('/', async (req, res) => {
     console.log('Hit endpoint to get all courses')
