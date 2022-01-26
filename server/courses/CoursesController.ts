@@ -4,7 +4,7 @@ import fetch from "node-fetch";
 import { Course } from "./Course";
 import { supabase } from "../db";
 import dotenv from "dotenv";
-import { setTownCoordinates, TownDTO } from "../scripts/setTownCoordinates";
+import { setTownCoordinates } from "../scripts/setCourseCoordinates";
 
 const result = dotenv.config();
 if (result.error) {
@@ -44,7 +44,7 @@ router.get("/loadCourse/:id", async (req, res) => {
 
 router.get("/setTownCoordinates", async (req, res) => {
   console.log("Hit endpoint to seed town coordinates");
-  const coordUrls = await setTownCoordinates(["AK"]);
+  const coordUrls = await setTownCoordinates(["FL"]);
   return res.json(coordUrls);
 });
 
@@ -56,6 +56,15 @@ router.get("/addCoordinatesToExistingCourse", async (req, res) => {
     .update({ townLat: course.townLat, townLong: course.townLong })
     .match({ id: course.id });
   return res.json(data);
+});
+
+router.get("/supabaseTesting", async (req, res) => {
+  console.log("Hit endpoint to test interactions with supabase");
+  const { data, count } = await supabase
+    .from("courses")
+    .select("*", { count: "exact" })
+    .range(0, 2);
+  return res.json({ data, count });
 });
 
 router.get("/:id", async (req, res) => {
@@ -138,6 +147,8 @@ const parseCourseResult = (htmlResult, id: number): Course => {
     state: state.text,
     par: 0,
     rating: 0,
+    lat: 0,
+    long: 0,
   };
 
   const teeTable = root.querySelector("#gvTee");
